@@ -2,14 +2,14 @@
 
 CLI script to inspect [opencode](https://opencode.ai) session metadata from the local SQLite DB.
 
-**Source:** `opencode-session.sh`
+**Source:** `opencode-session.py`
 **Symlink:** `~/.local/bin/opencode-session`
 
 ## Quick start
 
 ```bash
 # link the script
-ln -sf "$(pwd)/opencode-session.sh" ~/.local/bin/opencode-session
+ln -sf "$(pwd)/opencode-session.py" ~/.local/bin/opencode-session
 
 # list recent sessions
 opencode-session
@@ -127,7 +127,7 @@ This pipes the raw output into your current conversation's context, so the LLM c
 ### Limitations
 
 - Read-only — never writes to the DB
-- Depends on `sqlite3` and `python3` (both available on macOS by default)
+- Depends on `python3` (stdlib only: `sqlite3`, `json`, `datetime` — no pip packages needed)
 - Model field parsing is best-effort (some sessions store raw string, others JSON)
 
 ### Untested Fields
