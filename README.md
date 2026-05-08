@@ -26,7 +26,7 @@ opencode-session -n 5
 
 ## 1. What
 
-A CLI script that queries opencode's local SQLite DB (`~/.local/share/opencode/opencode.db`) to inspect session metadata — title, project, model, message count, todo progress, diff stats, and recent messages.
+A CLI script that queries opencode's local SQLite DB (`~/.local/share/opencode/opencode.db`) to inspect session metadata — title, project, model, message count, todo progress, diff stats, and recent messages with their actual content.
 
 ---
 
@@ -71,7 +71,8 @@ This tool fills that gap for:
 | Table | Role |
 |-------|------|
 | `session` | Per-session metadata (id, title, project, model, timestamps, diff summary) |
-| `message` | Chat messages linked to session via `session_id` |
+| `message` | Message metadata linked to session (role, agent, tokens, finish reason) |
+| `part` | Actual conversation content linked to message (user text, assistant reasoning, tool calls/results) |
 | `todo` | Todo items per session (content, status, priority) |
 | `project` | Registered projects (id, name, worktree path) |
 
@@ -79,6 +80,7 @@ This tool fills that gap for:
 
 1. **List mode** (no args or `--limit N`): `SELECT` recent N sessions (default 30) ordered by `time_created DESC`, joined with `project` for name resolution.
 2. **Detail mode** (session ID arg): Fetches the session row + counts for messages/todos via subqueries. Parses the JSON `model` field to extract the model ID. Formats timestamps (stored as ms epoch) to UTC.
+3. **Message rendering**: Fetches last 10 messages, then for each looks up its `part` rows to extract the actual text (user prompts, assistant reasoning, responses, tool calls). Parts are grouped by message and rendered by type — `text` (user/assistant messages), `reasoning` (thinking), `tool` (invoked tool name), `tool-result`, etc.
 
 ### Invocation
 
