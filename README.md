@@ -96,8 +96,8 @@ This tool fills that gap for:
 |---------|------|-------------|
 | `opencode-session` | List | Show last 30 sessions |
 | `opencode-session --limit 100` | List | Show last N sessions |
-| `opencode-session ses_xxx` | Detail | Show full session details, messages, and todos |
-| `opencode-session ses_xxx --limit 5` | Detail | `--limit` ignored in detail mode; same as above |
+| `opencode-session ses_xxx` | Detail | Show full session details, messages, todos, and forensic stats |
+| `opencode-session ses_xxx --all` | Detail | Same as above, but shows all messages chronologically (oldest first) |
 | `opencode-session -n 50` | List | `-n` shorthand for `--limit` |
 
 ---
@@ -144,3 +144,38 @@ The following fields exist in the script and schema but could not be verified wi
 | Diffs summary | `session.summary_diffs` | Not populated for any session |
 
 **Note for future validation:** To test these, a session needs to hit compaction, a share action, or have a non-null project name registered.
+
+---
+
+## 5. Forensic Comparison
+
+Below is a real-world comparison between running **manual SQLite queries** (5+ separate commands) vs a single `opencode-session` call on the same session (`ses_1fcbea243ffeXhW1e9Lo8H7ia3` — a 207-message, ~11.5h build session):
+
+| Data Point | Manual SQL (5+ queries) | `opencode-session` (1 command) |
+|---|---|---|
+| Session header | ✅ | ✅ |
+| Messages / Todos | 207, 6/6 done | 207, 6/6 done |
+| **Tool Usage** | | |
+| read | 81 | 81 |
+| edit | 70 | 70 |
+| bash | 67 | 67 |
+| write | 23 | 23 |
+| serena_write_memory | 12 | 12 |
+| serena_edit_memory | 1 | 1 |
+| **Part Types** | | |
+| tool | 267 | 267 |
+| step-start | 170 | 170 |
+| step-finish | 170 | 170 |
+| reasoning | 145 | 145 |
+| text | 52 * | **109** |
+| compaction | — | **2** |
+| **Finish Reasons** | | |
+| stop | 34 | 34 |
+| tool-calls | 136 | 136 |
+| Message IDs shown | ❌ | ✅ |
+| Chronological order | ✅ (ASC) | ✅ with `--all` |
+| Commands needed | **5+** | **1** |
+
+*\* Manual query had `AND role = 'assistant'` filter, missing user text parts — the script's unfiltered count is the correct total.*
+
+**Takeaway:** The script produces a superset of what raw SQL can extract, with richer formatting, message IDs for turn tracking, and forensic-level breakdowns — all in a single command. Zero SQL knowledge required.

@@ -32,7 +32,52 @@ def list_sessions(limit):
     print("Usage: opencode-session [--limit N] [session-id]")
 
 
-def show_session(sid):
+def forensic_stats(conn, sid):
+    print("── Forensic Stats ──")
+
+    tool_rows = conn.execute(
+        """SELECT json_extract(p.data, '$.tool') as tool_name, COUNT(*) as cnt
+           FROM part p
+           JOIN message m ON m.id = p.message_id
+           WHERE m.session_id = ? AND json_extract(p.data, '$.type') = 'tool'
+           GROUP BY 1 ORDER BY cnt DESC""",
+        (sid,),
+    ).fetchall()
+    if tool_rows:
+        print("  Tool Usage:")
+        for r in tool_rows:
+            print(f"    {r['tool_name']:<22} {r['cnt']}")
+        print()
+
+    part_rows = conn.execute(
+        """SELECT json_extract(p.data, '$.type') as ptype, COUNT(*) as cnt
+           FROM part p
+           JOIN message m ON m.id = p.message_id
+           WHERE m.session_id = ?
+           GROUP BY 1 ORDER BY cnt DESC""",
+        (sid,),
+    ).fetchall()
+    if part_rows:
+        print("  Part Types:")
+        for r in part_rows:
+            print(f"    {r['ptype']:<22} {r['cnt']}")
+        print()
+
+    finish_rows = conn.execute(
+        """SELECT json_extract(m.data, '$.finish') as finish, COUNT(*) as cnt
+           FROM message m
+           WHERE m.session_id = ? AND json_extract(m.data, '$.role') = 'assistant'
+           GROUP BY 1""",
+        (sid,),
+    ).fetchall()
+    if finish_rows:
+        print("  Finish Reasons:")
+        for r in finish_rows:
+            print(f"    {r['finish'] or 'none':<22} {r['cnt']}")
+        print()
+
+
+def show_session(sid, show_all=False):
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
 
@@ -89,10 +134,10 @@ def show_session(sid):
 
     print("── Messages ──")
     msg_rows = conn.execute(
-        """SELECT id, data FROM message
-           WHERE session_id = ?
-           ORDER BY time_created DESC
-           LIMIT 10""",
+        f"""SELECT id, data FROM message
+            WHERE session_id = ?
+            ORDER BY time_created {'ASC' if show_all else 'DESC'}
+            {'LIMIT 10' if not show_all else ''}""",
         (sid,),
     ).fetchall()
 
@@ -120,7 +165,8 @@ def show_session(sid):
                     if text
                     else "(no text)"
                 )
-                print(f"  [{role}] {preview}")
+                mid_short = mrow["id"][-8:]
+                print(f"  [{role}:{mid_short}] {preview}")
             else:
                 info = []
                 for p in parts_data:
@@ -140,7 +186,8 @@ def show_session(sid):
                 finish = msg.get("finish", "")
                 if finish:
                     info.append(f"finish={finish}")
-                print(f"  [{role}] {' | '.join(info)}")
+                mid_short = mrow["id"][-8:]
+                print(f"  [{role}:{mid_short}] {' | '.join(info)}")
     else:
         print("  (none)")
 
@@ -155,10 +202,14 @@ def show_session(sid):
         for t in todo_rows:
             print(f"{t['content']} │ {t['status']} │ {t['priority']}")
 
+    print()
+    forensic_stats(conn, sid)
+
 
 if __name__ == "__main__":
     limit = LIMIT
     sid = None
+    show_all = False
 
     args = sys.argv[1:]
     while args:
@@ -168,9 +219,11 @@ if __name__ == "__main__":
                 limit = int(args.pop(0)) if args else LIMIT
             except (ValueError, IndexError):
                 limit = LIMIT
+        elif arg in ("--all", "-a"):
+            show_all = True
         elif arg.startswith("-"):
             print(f"Unknown option: {arg}", file=sys.stderr)
-            print("Usage: opencode-session [--limit N] [session-id]", file=sys.stderr)
+            print("Usage: opencode-session [--limit N] [--all] [session-id]", file=sys.stderr)
             sys.exit(1)
         else:
             sid = arg
@@ -180,6 +233,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if sid:
-        show_session(sid)
+        show_session(sid, show_all)
     else:
         list_sessions(limit)
