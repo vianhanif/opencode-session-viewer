@@ -2,7 +2,7 @@
 
 **Ticket:** 001  
 **Date:** 2026-05-11  
-**Status:** Planned
+**Status:** Completed
 
 ---
 
@@ -75,7 +75,7 @@ Use a dict keyed by session ID. If a session matches both title and content, pre
 <id> │ <created> │ <match_label>: "<truncated_context>"
 ```
 
-Where `match_label` is `"Title matches"` or `"Content matches"`, and context is a truncated preview (first 60 chars).
+Where `match_label` is `"Title matches"` or `"Content matches"`, and context shows ~50 chars around the match position with `...` truncation markers.
 
 ---
 
@@ -90,3 +90,35 @@ Where `match_label` is `"Title matches"` or `"Content matches"`, and context is 
 
 - SQLite `LIKE` is case-insensitive for ASCII by default — fine for this use case
 - Message part JSON extraction could be slow on very large DBs — add LIMIT to protect
+
+---
+
+## 6. Post-Review Fixes
+
+| Issue | Fix |
+|-------|-----|
+| Content preview showed first 60 bytes, missing the match term | Now uses `instr()` to find match position and shows ~50 chars around it with `...` markers |
+| Missing perf note on JSON_EXTRACT | Added to README Limitations section |
+
+---
+
+## 7. Test Results
+
+**Branch:** `feature/001-search-sessions`
+**DB:** Local opencode SQLite database
+
+| # | Scenario | Command | Status |
+|---|----------|---------|--------|
+| 1 | Title match | `--search "review"` | ✅ Pass |
+| 2 | Content match | `-s "error"` | ✅ Pass |
+| 3 | Both match (dedup) | `-s "login"` | ✅ Pass |
+| 4 | No results | `-s "zzzzznotexist999"` | ✅ Pass — clean message |
+| 5 | Empty term | `--search ""` | ✅ Pass — error |
+| 6 | Missing value | `--search` alone | ✅ Pass — error |
+| 7 | Special chars | `-s "auth handler"` | ✅ Pass |
+| 8 | List regression | `opencode-session` | ✅ Pass |
+| 9 | Detail regression | `ses_xxx` | ✅ Pass |
+| 10 | `--all` regression | `ses_xxx --all` | ✅ Pass |
+| 11 | `--limit` regression | `-n 5` | ✅ Pass |
+
+**11/11 passed.** All existing functionality preserved, context-aware content preview working correctly.
