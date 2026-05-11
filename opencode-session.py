@@ -14,6 +14,74 @@ def fmt_ts(ms):
     )
 
 
+def search_sessions(term):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+
+    seen = {}
+
+    title_rows = conn.execute(
+        """SELECT s.id, s.title, datetime(s.time_created/1000, 'unixepoch') as created
+           FROM session s
+           WHERE s.title LIKE '%' || ? || '%'
+           ORDER BY s.time_created DESC
+           LIMIT 30""",
+        (term,),
+    ).fetchall()
+    for r in title_rows:
+        seen[r["id"]] = {
+            "id": r["id"],
+            "title": r["title"],
+            "created": r["created"],
+            "match": "Title matches",
+            "preview": (r["title"] or "")[:60],
+        }
+
+    content_rows = conn.execute(
+        """SELECT DISTINCT s.id, s.title,
+                  datetime(s.time_created/1000, 'unixepoch') as created,
+                  json_extract(p.data, '$.text') as full_text
+           FROM session s
+           JOIN message m ON m.session_id = s.id
+           JOIN part p ON p.message_id = m.id
+           WHERE json_extract(p.data, '$.type') = 'text'
+             AND json_extract(p.data, '$.text') LIKE '%' || ? || '%'
+           ORDER BY s.time_created DESC
+           LIMIT 30""",
+        (term,),
+    ).fetchall()
+    for r in content_rows:
+        if r["id"] not in seen:
+            text = r["full_text"] or ""
+            pos = text.lower().find(term.lower())
+            if pos >= 0:
+                start = max(0, pos - 25)
+                end = min(len(text), pos + len(term) + 25)
+                preview = text[start:end].replace("\n", " ").strip()
+                if start > 0:
+                    preview = "..." + preview
+                if end < len(text):
+                    preview = preview + "..."
+            else:
+                preview = (text[:60].replace("\n", " ") + "...") if text else ""
+            seen[r["id"]] = {
+                "id": r["id"],
+                "title": r["title"],
+                "created": r["created"],
+                "match": "Content matches",
+                "preview": preview,
+            }
+
+    if not seen:
+        print(f'No sessions found matching: {term}')
+        return
+
+    print(f'── Search Results for "{term}" ──')
+    for sid in seen:
+        r = seen[sid]
+        print(f'  {r["id"]} │ {r["created"]} │ {r["match"]}: "{r["preview"]}"')
+
+
 def list_sessions(limit):
     conn = sqlite3.connect(DB)
     cur = conn.execute(
@@ -29,7 +97,7 @@ def list_sessions(limit):
     for row in cur:
         print(" │ ".join(str(c) for c in row))
     print()
-    print("Usage: opencode-session [--limit N] [session-id]")
+    print("Usage: opencode-session [--limit N] [--search TERM|-s TERM] [session-id]")
 
 
 def forensic_stats(conn, sid):
@@ -210,6 +278,7 @@ if __name__ == "__main__":
     limit = LIMIT
     sid = None
     show_all = False
+    search_term = None
 
     args = sys.argv[1:]
     while args:
@@ -221,9 +290,14 @@ if __name__ == "__main__":
                 limit = LIMIT
         elif arg in ("--all", "-a"):
             show_all = True
+        elif arg in ("--search", "-s"):
+            search_term = args.pop(0) if args else None
+            if not search_term:
+                print("Error: --search requires a term", file=sys.stderr)
+                sys.exit(1)
         elif arg.startswith("-"):
             print(f"Unknown option: {arg}", file=sys.stderr)
-            print("Usage: opencode-session [--limit N] [--all] [session-id]", file=sys.stderr)
+            print("Usage: opencode-session [--limit N] [--all] [--search TERM|-s TERM] [session-id]", file=sys.stderr)
             sys.exit(1)
         else:
             sid = arg
@@ -232,7 +306,9 @@ if __name__ == "__main__":
         print(f"Error: opencode database not found at {DB}", file=sys.stderr)
         sys.exit(1)
 
-    if sid:
+    if search_term:
+        search_sessions(search_term)
+    elif sid:
         show_session(sid, show_all)
     else:
         list_sessions(limit)

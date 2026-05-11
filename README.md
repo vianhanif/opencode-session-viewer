@@ -96,6 +96,8 @@ This tool fills that gap for:
 |---------|------|-------------|
 | `opencode-session` | List | Show last 30 sessions |
 | `opencode-session --limit 100` | List | Show last N sessions |
+| `opencode-session --search "term"` | Search | Search sessions by title or message content |
+| `opencode-session -s "term"` | Search | Shorthand for `--search` |
 | `opencode-session ses_xxx` | Detail | Show full session details, messages, todos, and forensic stats |
 | `opencode-session ses_xxx --all` | Detail | Same as above, but shows all messages chronologically (oldest first) |
 | `opencode-session -n 50` | List | `-n` shorthand for `--limit` |
@@ -131,6 +133,7 @@ This pipes the raw output into your current conversation's context, so the LLM c
 - Read-only — never writes to the DB
 - Depends on `python3` (stdlib only: `sqlite3`, `json`, `datetime` — no pip packages needed)
 - Model field parsing is best-effort (some sessions store raw string, others JSON)
+- Content search (`--search`) uses `JSON_EXTRACT` + `LIKE` which performs a full table scan on the `part` table — fast for typical usage (<100 sessions), but may lag on very large databases
 
 ### Untested Fields
 
