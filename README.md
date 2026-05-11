@@ -133,6 +133,7 @@ This pipes the raw output into your current conversation's context, so the LLM c
 - Read-only — never writes to the DB
 - Depends on `python3` (stdlib only: `sqlite3`, `json`, `datetime` — no pip packages needed)
 - Model field parsing is best-effort (some sessions store raw string, others JSON)
+- Content search (`--search`) uses `JSON_EXTRACT` + `LIKE` which performs a full table scan on the `part` table — fast for typical usage (<100 sessions), but may lag on very large databases
 
 ### Untested Fields
 

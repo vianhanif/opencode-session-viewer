@@ -40,7 +40,7 @@ def search_sessions(term):
     content_rows = conn.execute(
         """SELECT DISTINCT s.id, s.title,
                   datetime(s.time_created/1000, 'unixepoch') as created,
-                  substr(json_extract(p.data, '$.text'), 1, 60) as preview
+                  json_extract(p.data, '$.text') as full_text
            FROM session s
            JOIN message m ON m.session_id = s.id
            JOIN part p ON p.message_id = m.id
@@ -52,12 +52,24 @@ def search_sessions(term):
     ).fetchall()
     for r in content_rows:
         if r["id"] not in seen:
+            text = r["full_text"] or ""
+            pos = text.lower().find(term.lower())
+            if pos >= 0:
+                start = max(0, pos - 25)
+                end = min(len(text), pos + len(term) + 25)
+                preview = text[start:end].replace("\n", " ").strip()
+                if start > 0:
+                    preview = "..." + preview
+                if end < len(text):
+                    preview = preview + "..."
+            else:
+                preview = (text[:60].replace("\n", " ") + "...") if text else ""
             seen[r["id"]] = {
                 "id": r["id"],
                 "title": r["title"],
                 "created": r["created"],
                 "match": "Content matches",
-                "preview": (r["preview"] or "")[:60],
+                "preview": preview,
             }
 
     if not seen:
