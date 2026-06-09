@@ -16,20 +16,55 @@ def fmt_ts(ms):
 
 def list_sessions(limit):
     conn = sqlite3.connect(DB)
-    cur = conn.execute(
-        """SELECT s.id, s.slug, substr(s.title,1,50),
+
+    parents = conn.execute(
+        """SELECT s.id, s.slug, s.agent, substr(s.title,1,50) as title,
                   datetime(s.time_created/1000, 'unixepoch') as created,
                   coalesce(p.name, s.project_id) as project
            FROM session s
            LEFT JOIN project p ON p.id = s.project_id
+           WHERE s.parent_id IS NULL
            ORDER BY s.time_created DESC
            LIMIT ?""",
         (limit,),
-    )
-    for row in cur:
-        print(" │ ".join(str(c) for c in row))
+    ).fetchall()
+
+    if not parents:
+        return
+
+    parent_ids = [r[0] for r in parents]
+    children_by_parent = {}
+
+    if parent_ids:
+        placeholders = ",".join("?" * len(parent_ids))
+        children = conn.execute(
+            f"""SELECT s.id, s.slug, s.agent, substr(s.title,1,50) as title,
+                       datetime(s.time_created/1000, 'unixepoch') as created,
+                       coalesce(p.name, s.project_id) as project,
+                       s.parent_id
+                FROM session s
+                LEFT JOIN project p ON p.id = s.project_id
+                WHERE s.parent_id IN ({placeholders})
+                ORDER BY s.time_created ASC""",
+            parent_ids,
+        ).fetchall()
+        for child in children:
+            children_by_parent.setdefault(child[6], []).append(child)
+
+    print(f"{'SESSION':<24} {'SLUG':<18} {'AGENT':<9} {'CREATED':<22} PROJECT")
+    print("-" * 100)
+
+    for parent in parents:
+        pid, slug, agent, title, created, project = parent
+        agent_d = agent or "-"
+        print(f"{pid:<24} {slug:<18} {agent_d:<9} {created:<22} {project}")
+        for child in children_by_parent.get(pid, []):
+            cid, cslug, cagent, ctitle, ccreated, cproject = child[:6]
+            cagent_d = cagent or "-"
+            print(f"  {cid:<22} {cslug:<18} {cagent_d:<9} {ccreated:<22} {cproject}")
+
     print()
-    print("Usage: opencode-session [--limit N] [session-id]")
+    print("Usage: opencode-session [--limit N] [--search TERM|-s TERM] [session-id]")
 
 
 def forensic_stats(conn, sid):
@@ -131,6 +166,29 @@ def show_session(sid, show_all=False):
     if row["summary_diffs"]:
         print(f"  Diffs:       {row['summary_diffs']}")
     print()
+
+    if row["parent_id"]:
+        prow = conn.execute(
+            "SELECT id, slug, agent, title FROM session WHERE id = ?",
+            (row["parent_id"],),
+        ).fetchone()
+        if prow:
+            print(f"Parent:        {prow['id']} ({prow['slug']}, {prow['agent'] or '?'})")
+            print()
+    else:
+        child_rows = conn.execute(
+            """SELECT id, slug, agent, title,
+                      datetime(time_created/1000, 'unixepoch') as created
+               FROM session
+               WHERE parent_id = ?
+               ORDER BY time_created ASC""",
+            (sid,),
+        ).fetchall()
+        if child_rows:
+            print("Subagents:")
+            for cr in child_rows:
+                print(f"  {cr['id']}  {cr['slug']:<20} {cr['agent'] or '-':<10} {cr['created']}")
+            print()
 
     print("── Messages ──")
     msg_rows = conn.execute(
