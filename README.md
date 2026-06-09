@@ -78,15 +78,15 @@ This tool fills that gap for:
 
 ### Query Logic
 
-1. **List mode** (no args or `--limit N`): `SELECT` recent N sessions (default 30) ordered by `time_created DESC`, joined with `project` for name resolution.
-2. **Detail mode** (session ID arg): Fetches the session row + counts for messages/todos via subqueries. Parses the JSON `model` field to extract the model ID. Formats timestamps (stored as ms epoch) to UTC.
+1. **List mode** (no args or `--limit N`): Queries N top-level (parent) sessions ordered by `time_created DESC`, then fetches all their subagent children in a second query. Children are grouped and indented under their parent. Includes `session.agent` column.
+2. **Detail mode** (session ID arg): Fetches the session row + counts for messages/todos via subqueries. Also shows parent session link (if a subagent) or subagent child list (if a parent). Parses the JSON `model` field to extract the model ID. Formats timestamps (stored as ms epoch) to UTC.
 3. **Message rendering**: Fetches last 10 messages, then for each looks up its `part` rows to extract the actual text (user prompts, assistant reasoning, responses, tool calls). Parts are grouped by message and rendered by type — `text` (user/assistant messages), `reasoning` (thinking), `tool` (invoked tool name), `tool-result`, etc.
 
 ### Invocation
 
 | Method | Command |
 |--------|---------|
-| Terminal | `opencode-session [--limit N] [session-id]` |
+| Terminal | `opencode-session [--limit N] [--search TERM|-s TERM] [session-id]` |
 | opencode TUI (raw output) | `!opencode-session ses_xxx` |
 | opencode TUI (LLM-assisted) | `/session ses_xxx` |
 
@@ -94,8 +94,8 @@ This tool fills that gap for:
 
 | Command | Mode | Description |
 |---------|------|-------------|
-| `opencode-session` | List | Show last 30 sessions |
-| `opencode-session --limit 100` | List | Show last N sessions |
+| `opencode-session` | List | Show last 30 parent sessions with subagents grouped under them |
+| `opencode-session --limit 100` | List | Show last N parent sessions (children always included) |
 | `opencode-session --search "term"` | Search | Search sessions by title or message content |
 | `opencode-session -s "term"` | Search | Shorthand for `--search` |
 | `opencode-session ses_xxx` | Detail | Show full session details, messages, todos, and forensic stats |
