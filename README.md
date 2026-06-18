@@ -36,19 +36,19 @@ A CLI script that queries opencode's local SQLite DB (`~/.local/share/opencode/o
 
 The built-in `opencode session list` shows only **3 fields**: Session ID, Title, and last Updated time.
 
-| Data | `opencode session list` | `opencode-session` |
-|------|------------------------|-------------------|
-| Session ID | ✅ | ✅ |
-| Title | ✅ | ✅ |
-| Updated time | ✅ | ✅ |
-| Slug | ❌ | ✅ |
-| Project name / path | ❌ | ✅ |
-| Agent used | ❌ | ✅ |
-| Model used | ❌ | ✅ |
-| Created time | ❌ | ✅ |
-| Message count | ❌ | ✅ |
-| Todo list with status | ❌ | ✅ |
-| Recent messages | ❌ | ✅ |
+| Data | `opencode session list` | `opencode-session list` | `opencode-session detail` |
+|------|------------------------|--------------------------|---------------------------|
+| Session ID | ✅ | ✅ | ✅ |
+| Title | ✅ | ✅ | ✅ |
+| Updated time | ✅ | ❌ | ✅ |
+| Agent used | ❌ | ✅ | ✅ |
+| Model used | ❌ | ✅ | ✅ |
+| Created time | ❌ | ✅ | ✅ |
+| Slug | ❌ | ❌ | ✅ |
+| Project name / path | ❌ | ❌ | ✅ |
+| Message count | ❌ | ❌ | ✅ |
+| Todo list with status | ❌ | ❌ | ✅ |
+| Recent messages | ❌ | ❌ | ✅ |
 
 There is **no built-in detail command** — `opencode session` only has `list` and `delete`. To get the above fields, you'd need to run `opencode db` with raw SQL or `opencode export` and parse JSON manually.
 
@@ -78,7 +78,7 @@ This tool fills that gap for:
 
 ### Query Logic
 
-1. **List mode** (no args or `--limit N`): Queries N top-level (parent) sessions ordered by `time_created DESC`, then fetches all their subagent children in a second query. Children are grouped and indented under their parent. Includes `session.agent` column.
+1. **List mode** (no args or `--limit N`): Queries N top-level (parent) sessions ordered by `time_created DESC`, then fetches all their subagent children in a second query. Children are grouped and indented under their parent. Displays columns: SESSION, TITLE, AGENT, MODEL, CREATED.
 2. **Detail mode** (session ID arg): Fetches the session row + counts for messages/todos via subqueries. Also shows parent session link (if a subagent) or subagent child list (if a parent). Parses the JSON `model` field to extract the model ID. Formats timestamps (stored as ms epoch) to UTC.
 3. **Message rendering**: Fetches last 10 messages, then for each looks up its `part` rows to extract the actual text (user prompts, assistant reasoning, responses, tool calls). Parts are grouped by message and rendered by type — `text` (user/assistant messages), `reasoning` (thinking), `tool` (invoked tool name), `tool-result`, etc.
 
@@ -94,9 +94,9 @@ This tool fills that gap for:
 
 | Command | Mode | Description |
 |---------|------|-------------|
-| `opencode-session` | List | Show last 30 parent sessions with subagents grouped under them |
+| `opencode-session` | List | Show last 30 parent sessions with subagents grouped under them (SESSION, TITLE, AGENT, MODEL, CREATED) |
 | `opencode-session --limit 100` | List | Show last N parent sessions (children always included) |
-| `opencode-session --search "term"` | Search | Search sessions by title or message content |
+| `opencode-session --search "term"` | Search | Search sessions by title or message content, same table format |
 | `opencode-session -s "term"` | Search | Shorthand for `--search` |
 | `opencode-session ses_xxx` | Detail | Show full session details, messages, todos, and forensic stats |
 | `opencode-session ses_xxx --all` | Detail | Same as above, but shows all messages chronologically (oldest first) |
@@ -124,7 +124,7 @@ This pipes the raw output into your current conversation's context, so the LLM c
 | Audit teammate sessions | List sessions by project, check what model/agent was used and what files were changed |
 | Debug compaction issues | Check `time_compacting` — if absent, session never compacted; if very recent, might explain context loss |
 | Track completion rate | `opencode-session` shows todos_done / total — useful for standup or progress reviews |
-| Find a session by project | List all sessions, grep by project name to find the right session ID quickly |
+| Verify model usage | Confirm a session used the intended model (e.g., `kimi-k2.5` vs `big-pickle`) — visible directly in list view |
 | Verify model usage | Confirm a session used the intended model (e.g., `kimi-k2.5` vs `big-pickle`) — useful when testing model configs |
 | Pre-populate a new prompt | `!opencode-session ses_xxx` inside the TUI gives the LLM full context of prior work without manual copy-paste |
 
