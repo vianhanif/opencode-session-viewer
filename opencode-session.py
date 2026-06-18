@@ -21,7 +21,9 @@ def search_sessions(term):
     seen = {}
 
     title_rows = conn.execute(
-        """SELECT s.id, s.title, datetime(s.time_created/1000, 'unixepoch') as created
+        """SELECT s.id, s.agent, substr(s.title,1,50) as title,
+                  datetime(s.time_created/1000, 'unixepoch') as created,
+                  coalesce(json_extract(s.model, '$.id'), s.model) as model
            FROM session s
            WHERE s.title LIKE '%' || ? || '%'
            ORDER BY s.time_created DESC
@@ -31,16 +33,16 @@ def search_sessions(term):
     for r in title_rows:
         seen[r["id"]] = {
             "id": r["id"],
+            "agent": r["agent"],
             "title": r["title"],
             "created": r["created"],
-            "match": "Title matches",
-            "preview": (r["title"] or "")[:60],
+            "model": r["model"],
         }
 
     content_rows = conn.execute(
-        """SELECT DISTINCT s.id, s.title,
+        """SELECT DISTINCT s.id, s.agent, substr(s.title,1,50) as title,
                   datetime(s.time_created/1000, 'unixepoch') as created,
-                  json_extract(p.data, '$.text') as full_text
+                  coalesce(json_extract(s.model, '$.id'), s.model) as model
            FROM session s
            JOIN message m ON m.session_id = s.id
            JOIN part p ON p.message_id = m.id
@@ -52,24 +54,12 @@ def search_sessions(term):
     ).fetchall()
     for r in content_rows:
         if r["id"] not in seen:
-            text = r["full_text"] or ""
-            pos = text.lower().find(term.lower())
-            if pos >= 0:
-                start = max(0, pos - 25)
-                end = min(len(text), pos + len(term) + 25)
-                preview = text[start:end].replace("\n", " ").strip()
-                if start > 0:
-                    preview = "..." + preview
-                if end < len(text):
-                    preview = preview + "..."
-            else:
-                preview = (text[:60].replace("\n", " ") + "...") if text else ""
             seen[r["id"]] = {
                 "id": r["id"],
+                "agent": r["agent"],
                 "title": r["title"],
                 "created": r["created"],
-                "match": "Content matches",
-                "preview": preview,
+                "model": r["model"],
             }
 
     if not seen:
@@ -77,20 +67,24 @@ def search_sessions(term):
         return
 
     print(f'── Search Results for "{term}" ──')
+    print(f"{'SESSION':<24} {'TITLE':<36} {'AGENT':<9} {'MODEL':<20} CREATED")
+    print("-" * 110)
     for sid in seen:
         r = seen[sid]
-        print(f'  {r["id"]} │ {r["created"]} │ {r["match"]}: "{r["preview"]}"')
+        agent_d = r["agent"] or "-"
+        model_d = r["model"] or "-"
+        print(f'{r["id"]:<24} {r["title"]:<36} {agent_d:<9} {model_d:<20} {r["created"]}')
+    print()
 
 
 def list_sessions(limit):
     conn = sqlite3.connect(DB)
 
     parents = conn.execute(
-        """SELECT s.id, s.slug, s.agent, substr(s.title,1,50) as title,
+        """SELECT s.id, s.agent, substr(s.title,1,50) as title,
                   datetime(s.time_created/1000, 'unixepoch') as created,
-                  coalesce(p.name, s.project_id) as project
+                  coalesce(json_extract(s.model, '$.id'), s.model) as model
            FROM session s
-           LEFT JOIN project p ON p.id = s.project_id
            WHERE s.parent_id IS NULL
            ORDER BY s.time_created DESC
            LIMIT ?""",
@@ -106,30 +100,31 @@ def list_sessions(limit):
     if parent_ids:
         placeholders = ",".join("?" * len(parent_ids))
         children = conn.execute(
-            f"""SELECT s.id, s.slug, s.agent, substr(s.title,1,50) as title,
+            f"""SELECT s.id, s.agent, substr(s.title,1,50) as title,
                        datetime(s.time_created/1000, 'unixepoch') as created,
-                       coalesce(p.name, s.project_id) as project,
+                       coalesce(json_extract(s.model, '$.id'), s.model) as model,
                        s.parent_id
                 FROM session s
-                LEFT JOIN project p ON p.id = s.project_id
                 WHERE s.parent_id IN ({placeholders})
                 ORDER BY s.time_created ASC""",
             parent_ids,
         ).fetchall()
         for child in children:
-            children_by_parent.setdefault(child[6], []).append(child)
+            children_by_parent.setdefault(child[5], []).append(child)
 
-    print(f"{'SESSION':<24} {'SLUG':<18} {'AGENT':<9} {'CREATED':<22} PROJECT")
-    print("-" * 100)
+    print(f"{'SESSION':<24} {'TITLE':<36} {'AGENT':<9} {'MODEL':<20} CREATED")
+    print("-" * 110)
 
     for parent in parents:
-        pid, slug, agent, title, created, project = parent
+        pid, agent, title, created, model = parent
         agent_d = agent or "-"
-        print(f"{pid:<24} {slug:<18} {agent_d:<9} {created:<22} {project}")
+        model_d = model or "-"
+        print(f"{pid:<24} {title:<36} {agent_d:<9} {model_d:<20} {created}")
         for child in children_by_parent.get(pid, []):
-            cid, cslug, cagent, ctitle, ccreated, cproject = child[:6]
+            cid, cagent, ctitle, ccreated, cmodel = child[:5]
             cagent_d = cagent or "-"
-            print(f"  {cid:<22} {cslug:<18} {cagent_d:<9} {ccreated:<22} {cproject}")
+            cmodel_d = cmodel or "-"
+            print(f"  {cid:<22} {ctitle:<36} {cagent_d:<9} {cmodel_d:<20} {ccreated}")
 
     print()
     print("Usage: opencode-session [--limit N] [--search TERM|-s TERM] [session-id]")
