@@ -1,15 +1,20 @@
 # opencode-session-viewer
 
-CLI script to inspect [opencode](https://opencode.ai) session metadata from the local SQLite DB.
+CLI tool to inspect [opencode](https://opencode.ai) session metadata from the local SQLite DB.
 
-**Source:** `opencode-session.py`
+**Language:** Go  
+**Source:** `main.go`  
+**Binary:** `opencode-session`  
 **Symlink:** `~/.local/bin/opencode-session`
 
 ## Quick start
 
 ```bash
-# link the script
-ln -sf "$(pwd)/opencode-session.py" ~/.local/bin/opencode-session
+# build
+go build -o opencode-session .
+
+# link the binary
+ln -sf "$(pwd)/opencode-session" ~/.local/bin/opencode-session
 
 # list recent sessions
 opencode-session
@@ -26,7 +31,7 @@ opencode-session -n 5
 
 ## 1. What
 
-A CLI script that queries opencode's local SQLite DB (`~/.local/share/opencode/opencode.db`) to inspect session metadata — title, project, model, message count, todo progress, diff stats, and recent messages with their actual content.
+A CLI tool that queries opencode's local SQLite DB (`~/.local/share/opencode/opencode.db`) to inspect session metadata — title, project, model, message count, todo progress, diff stats, and recent messages with their actual content.
 
 ---
 
@@ -86,7 +91,7 @@ This tool fills that gap for:
 
 | Method | Command |
 |--------|---------|
-| Terminal | `opencode-session [--limit N] [--search TERM|-s TERM] [session-id]` |
+| Terminal | `opencode-session [--limit N] [--search TERM\|-s TERM] [session-id]` |
 | opencode TUI (raw output) | `!opencode-session ses_xxx` |
 | opencode TUI (LLM-assisted) | `/session ses_xxx` |
 
@@ -121,27 +126,26 @@ This pipes the raw output into your current conversation's context, so the LLM c
 | Use Case | How |
 |----------|-----|
 | Resume abandoned work | Find the session ID, then `!opencode-session ses_xxx` to remind yourself of the todos and last messages |
-| Audit teammate sessions | List sessions by project, check what model/agent was used and what files were changed |
+| Audit teammate sessions | List sessions, check what model/agent was used and what files were changed |
 | Debug compaction issues | Check `time_compacting` — if absent, session never compacted; if very recent, might explain context loss |
 | Track completion rate | `opencode-session` shows todos_done / total — useful for standup or progress reviews |
 | Verify model usage | Confirm a session used the intended model (e.g., `kimi-k2.5` vs `big-pickle`) — visible directly in list view |
-| Verify model usage | Confirm a session used the intended model (e.g., `kimi-k2.5` vs `big-pickle`) — useful when testing model configs |
 | Pre-populate a new prompt | `!opencode-session ses_xxx` inside the TUI gives the LLM full context of prior work without manual copy-paste |
 
 ### Limitations
 
 - Read-only — never writes to the DB
-- Depends on `python3` (stdlib only: `sqlite3`, `json`, `datetime` — no pip packages needed)
+- Depends on Go runtime for building; binary is standalone after build
 - Model field parsing is best-effort (some sessions store raw string, others JSON)
 - Content search (`--search`) uses `JSON_EXTRACT` + `LIKE` which performs a full table scan on the `part` table — fast for typical usage (<100 sessions), but may lag on very large databases
 
 ### Untested Fields
 
-The following fields exist in the script and schema but could not be verified with real data in this DB — no sessions had them populated:
+The following fields exist in the tool and schema but could not be verified with real data in this DB — no sessions had them populated:
 
 | Field | DB column | Why missing |
 |-------|-----------|-------------|
-| Project name (resolved) | `project.name` | All 64 sessions have empty project names in the `project` table |
+| Project name (resolved) | `project.name` | All sessions have empty project names in the `project` table |
 | Compacted time | `session.time_compacting` | No session has ever been compacted |
 | Share URL | `session.share_url` | No session has been shared |
 | Diffs summary | `session.summary_diffs` | Not populated for any session |
@@ -179,6 +183,6 @@ Below is a real-world comparison between running **manual SQLite queries** (5+ s
 | Chronological order | ✅ (ASC) | ✅ with `--all` |
 | Commands needed | **5+** | **1** |
 
-*\* Manual query had `AND role = 'assistant'` filter, missing user text parts — the script's unfiltered count is the correct total.*
+*\* Manual query had `AND role = 'assistant'` filter, missing user text parts — the tool's unfiltered count is the correct total.*
 
-**Takeaway:** The script produces a superset of what raw SQL can extract, with richer formatting, message IDs for turn tracking, and forensic-level breakdowns — all in a single command. Zero SQL knowledge required.
+**Takeaway:** The tool produces a superset of what raw SQL can extract, with richer formatting, message IDs for turn tracking, and forensic-level breakdowns — all in a single command. Zero SQL knowledge required.
